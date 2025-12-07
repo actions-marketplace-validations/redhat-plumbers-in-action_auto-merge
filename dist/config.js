@@ -13,7 +13,10 @@ export class Config {
     }
     static async getConfig(octokit) {
         const path = getInput('config-path', { required: true });
-        const retrievedConfig = (await octokit.config.get(Object.assign(Object.assign({}, context.repo), { path, defaults: configs => deepmerge.all([this.defaults, ...configs]) }))).config;
+        const overwriteMerge = (_defaultArray, configArray, _options) => configArray;
+        const retrievedConfig = (await octokit.config.get(Object.assign(Object.assign({}, context.repo), { path, defaults: configs => deepmerge.all([this.defaults, ...configs], {
+                arrayMerge: overwriteMerge,
+            }) }))).config;
         debug(`Configuration '${path}': ${JSON.stringify(retrievedConfig)}`);
         if (Config.isConfigEmpty(retrievedConfig)) {
             throw new Error(`Missing configuration. Please setup 'Tracker Validator' Action using 'tracker-validator.yml' file.`);

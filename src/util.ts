@@ -1,6 +1,9 @@
 import { debug } from '@actions/core';
+import { context } from '@actions/github';
 import { Octokit } from '@octokit/core';
 import { Endpoints } from '@octokit/types';
+
+import { AutoMergeError } from './error';
 
 // Update check run - check completed + conclusion
 // ! Allow specifying workflow run when creating a checkrun from a GitHub workflow
@@ -9,8 +12,6 @@ import { Endpoints } from '@octokit/types';
 export async function updateStatusCheck(
   octokit: Octokit,
   checkID: number,
-  owner: string,
-  repo: string,
   status: Endpoints['POST /repos/{owner}/{repo}/check-runs']['parameters']['status'],
   conclusion: Endpoints['POST /repos/{owner}/{repo}/check-runs']['parameters']['conclusion'],
   message: string
@@ -18,8 +19,7 @@ export async function updateStatusCheck(
   await octokit.request(
     'PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}',
     {
-      owner,
-      repo,
+      ...context.repo,
       check_run_id: checkID,
       status,
       completed_at: new Date().toISOString(),
@@ -37,7 +37,7 @@ export function getFailedMessage(error: string[]): string {
     return '';
   }
 
-  return '### Failed' + '\n\n' + error.join('\n');
+  return '#### Failed' + '\n\n' + error.join('\n');
 }
 
 export function getSuccessMessage(message: string[]): string {
@@ -45,13 +45,11 @@ export function getSuccessMessage(message: string[]): string {
     return '';
   }
 
-  return '### Success' + '\n\n' + message.join('\n');
+  return '#### Success' + '\n\n' + message.join('\n');
 }
 
 export async function setLabels(
   octokit: Octokit,
-  owner: string,
-  repo: string,
   issueNumber: number,
   labels: string[]
 ) {
@@ -63,8 +61,7 @@ export async function setLabels(
   await octokit.request(
     'POST /repos/{owner}/{repo}/issues/{issue_number}/labels',
     {
-      owner,
-      repo,
+      ...context.repo,
       issue_number: issueNumber,
       labels,
     }
@@ -73,16 +70,13 @@ export async function setLabels(
 
 export async function removeLabel(
   octokit: Octokit,
-  owner: string,
-  repo: string,
   issueNumber: number,
   label: string
 ) {
   await octokit.request(
     'DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}',
     {
-      owner,
-      repo,
+      ...context.repo,
       issue_number: issueNumber,
       name: label,
     }
@@ -90,5 +84,5 @@ export async function removeLabel(
 }
 
 export function raise(error: string): never {
-  throw new Error(error);
+  throw new AutoMergeError(error);
 }

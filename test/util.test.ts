@@ -15,7 +15,7 @@ describe('test basic utility functions', () => {
     message = getFailedMessage(errors);
 
     expect(message).toMatchInlineSnapshot(`
-      "### Failed
+      "#### Failed
 
       error1
       error2"
@@ -32,7 +32,7 @@ describe('test basic utility functions', () => {
     message = getSuccessMessage(success);
 
     expect(message).toMatchInlineSnapshot(`
-      "### Success
+      "#### Success
 
       success1
       success2"
@@ -40,7 +40,9 @@ describe('test basic utility functions', () => {
   });
 
   test('raise()', () =>
-    expect(() => raise('new error')).toThrow(new Error('new error')));
+    expect(() => raise('new error')).toThrowErrorMatchingInlineSnapshot(
+      `[Error: new error]`
+    ));
 
   test.todo('setLabels()', async () => {});
 

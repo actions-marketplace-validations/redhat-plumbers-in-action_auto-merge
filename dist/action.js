@@ -4,10 +4,10 @@ import { Config } from './config';
 import { Controller } from './controller';
 import { Jira } from './jira';
 import { getFailedMessage, getSuccessMessage, raise, removeLabel, setLabels, } from './util';
-async function action(octokit, owner, repo, pr) {
-    const trackerType = getInput('tracker-type', { required: true });
+async function action(octokit, pr) {
+    const trackerType = getInput('tracker-type');
     const config = await Config.getConfig(octokit);
-    let trackerController;
+    let trackerController = undefined;
     switch (trackerType) {
         case 'bugzilla':
             const bzInstance = getInput('bugzilla-instance', { required: true });
@@ -21,14 +21,19 @@ async function action(octokit, owner, repo, pr) {
             trackerController = new Controller(new Jira(jiraInstance, jiraAPIToken));
             debug(`Using Jira '${jiraInstance}', version: '${await trackerController.adapter.getVersion()}'`);
             break;
+        case 'none':
+            debug(`No tracker specified`);
+            break;
         default:
-            raise(`Missing tracker or Unknown tracker type: '${trackerType}'`);
+            raise(`🔴 Missing tracker or Unknown tracker type; type: '${trackerType}'`);
     }
     let message = [];
     let err = [];
     let labels = { add: [] };
-    const tracker = getInput('tracker', { required: true });
-    await trackerController.adapter.getIssueDetails(tracker);
+    if (trackerController) {
+        const tracker = getInput('tracker', { required: true });
+        await trackerController.adapter.getIssueDetails(tracker);
+    }
     if (pr.draft || pr.currentLabels.includes(config.labels['dont-merge'])) {
         err.push(`🔴 Pull Request is marked as draft or has \`${config.labels['dont-merge']}\` label`);
     }
@@ -41,6 +46,12 @@ async function action(octokit, owner, repo, pr) {
     else {
         message.push(`🟢 Pull Request meet requirements, title has correct form`);
     }
+    if (pr.mergeable !== true) {
+        err.push(`🔴 Pull Request can't be merged, \`mergeable\` is \`${pr.mergeable}\``);
+    }
+    else {
+        message.push(`🟢 Pull Request meet requirements, \`mergeable\` is \`true\``);
+    }
     switch (pr === null || pr === void 0 ? void 0 : pr.mergeableState) {
         case 'clean':
             message.push(`🟢 Pull Request meet requirements, \`mergeable_state\` is \`clean\``);
@@ -49,7 +60,9 @@ async function action(octokit, owner, repo, pr) {
             message.push(`🟠 Pull Request meet requirements, \`mergeable_state\` is \`unstable\``);
             break;
         default:
-            err.push(`🔴 Pull Request doesn't meet requirements, \`mergeable_state\` is \`${pr === null || pr === void 0 ? void 0 : pr.mergeableState}\``);
+            // Mergeable state is seems to be broken - https://github.com/orgs/community/discussions/73849
+            // Let's not block PRs because of that, we are checking the CI anyway
+            message.push(`🟠 Pull Request doesn't meet requirements, \`mergeable_state\` is \`${pr === null || pr === void 0 ? void 0 : pr.mergeableState}\``);
     }
     // This check has to be last before merging action because it is setting manual-merge label
     if (!config.targetBranch.includes(pr.targetBranch)) {
@@ -58,17 +71,21 @@ async function action(octokit, owner, repo, pr) {
     }
     else {
         if (pr.currentLabels.includes(config.labels['manual-merge'])) {
-            removeLabel(octokit, owner, repo, pr.number, config.labels['manual-merge']);
+            removeLabel(octokit, pr.number, config.labels['manual-merge']);
         }
         message.push(`🟢 Pull Request has correct target branch \`${pr.targetBranch}\``);
     }
-    if (err.length < 0) {
+    if (err.length == 0) {
+        debug(`No errors found, merging pull request`);
         const isMerged = await pr.merge();
         if (isMerged) {
-            await trackerController.adapter.addMergeComment(pr.title, pr.targetBranch, pr.url);
+            debug(`Pull Request was merged`);
+            if (trackerController) {
+                await trackerController.adapter.addMergeComment(pr.title, pr.targetBranch, pr.url);
+            }
             message.push(`🟢 Pull Request was merged`);
             if (pr.currentLabels.includes(config.labels['manual-merge'])) {
-                removeLabel(octokit, owner, repo, pr.number, config.labels['manual-merge']);
+                removeLabel(octokit, pr.number, config.labels['manual-merge']);
             }
         }
         else {
@@ -76,7 +93,7 @@ async function action(octokit, owner, repo, pr) {
             labels.add.push(config.labels['manual-merge']);
         }
     }
-    setLabels(octokit, owner, repo, pr.number, labels.add);
+    setLabels(octokit, pr.number, labels.add);
     if (err.length > 0) {
         raise(getFailedMessage(err) + '\n\n' + getSuccessMessage(message));
     }

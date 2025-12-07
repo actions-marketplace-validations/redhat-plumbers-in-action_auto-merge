@@ -56,14 +56,14 @@ jobs:
 
     steps:
       - name: Repository checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - id: Metadata
         name: Gather Pull Request Metadata
         uses: redhat-plumbers-in-action/gather-pull-request-metadata@v1
 
       - name: Upload artifact with gathered metadata
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pr-metadata
           path: ${{ steps.Metadata.outputs.metadata-file }}
@@ -118,7 +118,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Auto Merge
-        uses: redhat-plumbers-in-action/auto-merge@v1
+        uses: redhat-plumbers-in-action/auto-merge@v2
         with:
           pr-metadata: ${{ needs.download-metadata.outputs.pr-metadata }}
           tracker: ${{ fromJSON(steps.commit-linter.outputs.validated-pr-metadata).validation.tracker.id }}
@@ -137,7 +137,7 @@ Action currently accepts the following options:
 ```yml
 # ...
 
-- uses: redhat-plumbers-in-action/auto-merge@v1
+- uses: redhat-plumbers-in-action/auto-merge@v2
   with:
     pr-metadata:        <pr-metadata.json>
     config-path:        <path to config file>
@@ -146,7 +146,9 @@ Action currently accepts the following options:
     bugzilla-instance:  <Bugzilla instance URL>
     bugzilla-api-token: <Bugzilla API token>
     jira-instance:      <Jira instance URL>
-    jiira-api-token:    <Jira API token>
+    jira-api-token:    <Jira API token>
+    set-status:         <true or false>
+    status-title:       <status title>
     token:              <GitHub token or PAT>
 
 # ...
@@ -173,14 +175,14 @@ Path to configuration file. Configuration file format is described in: [Configur
 The tracker identificator. For example, for Bugzilla: `tracker: 1234567`.
 
 * default value: `undefined`
-* requirements: `required`
+* requirements: `optional`
 
 ### tracker-type
 
-The tracker type. Currently supported: `bugzilla` and `jira`.
+The tracker type. Currently supported: `bugzilla`, `jira`, and `none`. When defined, then also `tracker` input has to be defined.
 
-* default value: `undefined`
-* requirements: `required`
+* default value: `none`
+* requirements: `optional`
 
 ### bugzilla-instance
 
@@ -203,11 +205,25 @@ The URL of the Jira instance on which will be performed API requests and validat
 * default value: `undefined`
 * requirements: `required`
 
-### jiira-api-token
+### jira-api-token
 
 The Jira API token is used for performing API requests. The token should be stored as GitHub secret. Never paste the token directly into the workflow file.
 
 * default value: `undefined`
+* requirements: `optional`
+
+### set-status
+
+Set status on Pull Request. If enabled, Action will create check-run status with validation results.
+
+* default value: `false`
+* requirements: `optional`
+
+### status-title
+
+Optional H3 title of status message.
+
+* default value: `Auto Merge`
 * requirements: `optional`
 
 ### token
@@ -225,6 +241,12 @@ permissions:
 * default value: `undefined`
 * requirements: `required`
 * recomended value: `secrets.GITHUB_TOKEN`
+
+## Outputs
+
+### `status`
+
+Message with status of Auto Merge action.
 
 ## Configuration
 
@@ -269,3 +291,4 @@ The target branches on which the Pull Request will be automatically merged. If t
 ## Limitations
 
 * Status checks from Pull Request Validator are randomly assigned to check suites, GitHub API for check suites doesn't provide a way to assign a check to a specific suite.
+* Specific branch protection rules might block the merge of a Pull Request even if all requirements are satisfied. If you encounter a message like this: `Error: You're not authorized to push to this branch. Visit https://docs.github.com/articles/about-protected-branches/ for more information.` you should check your branch protection rules. The issue is usually caused by the `Restrict who can push to matching branches` option.
